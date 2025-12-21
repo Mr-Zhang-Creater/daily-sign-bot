@@ -10,7 +10,7 @@ import json
 from datetime import datetime, timedelta
 
 # ==================== 配置区域 ====================
-API_URL = "https://app.lkdyw.cn/Beta_v1/sign.php"
+API_URL = "https://app.lkdyw.cn/Beta_v2/sign.php"
 
 # 完整的30个用户名列表
 USERNAMES = [
