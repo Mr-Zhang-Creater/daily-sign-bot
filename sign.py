@@ -12,7 +12,6 @@ from datetime import datetime, timedelta
 # ==================== 配置区域 ====================
 API_URL = "https://app.lkdyw.cn/Beta_v2/sign.php"
 
-# 完整的30个用户名列表
 USERNAMES = [
     "lekansp", "momuser", "abcd123", "我不想上班22222222", "yujingchao",
     "fgo666", "fanqie66", "todoto11", "qazwsx123", "huwei123",
@@ -22,37 +21,66 @@ USERNAMES = [
     "wudg1330", "diaosg37", "changs19", "leibc509", "wane7840"
 ]
 
-# 请求头
 HEADERS = {
     "Host": "app.lkdyw.cn",
-    "Origin": "https://app.lkdyw.cn",
-    "User-Agent": "Mozilla/5.0 (Linux; Android 10; TAS-AN00 Build/HUAWEITAS-AN00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/74.0.3729.186 Mobile Safari/537.36 AgentWeb/5.0.8  UCBrowser/11.6.4.950",
+    "Connection": "keep-alive",
+    "User-Agent": "Mozilla/5.0 (Linux; Android 12; TAS-AN00 Build/HUAWEITAS-AN00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/94.0.4606.85 Mobile Safari/537.36 AgentWeb/5.0.8  UCBrowser/11.6.4.950",
     "Content-Type": "application/x-www-form-urlencoded",
     "Accept": "*/*",
-    "Referer": "https://app.lkdyw.cn/Beta_v1/",
-    "Accept-Encoding": "gzip, deflate",
-    "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Origin": "https://app.lkdyw.cn",
     "X-Requested-With": "com.lookvideo",
-    "Connection": "keep-alive"
+    "Sec-Fetch-Site": "same-origin",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Dest": "empty",
+    "Referer": "https://app.lkdyw.cn/Beta_v2/",
+    "Accept-Encoding": "gzip, deflate",
+    "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7"
 }
 
-# 请求间隔范围（秒）【已修改为5-10秒】
 INTERVAL_MIN = 5
 INTERVAL_MAX = 10
 
-# 钉钉配置
 DINGTALK_WEBHOOK = os.getenv('DINGTALK_WEBHOOK')
 DINGTALK_SECRET = os.getenv('DINGTALK_SECRET')
 DINGTALK_KEYWORD = "签到"
+
+# ==================== 用户名保护功能 ====================
+def mask_username(username):
+    """
+    隐藏用户名中间部分，只显示前后字符
+    
+    规则：
+    - 用户名长度 <= 4：显示前1后1，中间用*填充
+    - 用户名长度 5-6：显示前2后2，中间用*填充
+    - 用户名长度 > 6：显示前3后3，中间用*填充
+    """
+    if not username:
+        return "***"
+    
+    length = len(username)
+    
+    if length <= 2:
+        return username[0] + "*"  # 很短的用户名
+    
+    if length <= 4:
+        # 例如：abcd → a*d
+        return username[0] + "*" * (length - 2) + username[-1]
+    
+    if length <= 6:
+        # 例如：abcde → ab*de
+        return username[:2] + "*" * (length - 4) + username[-2:]
+    
+    # length > 6
+    # 例如：abcdefgh → abc***fgh
+    front = 3
+    back = 3
+    return username[:front] + "*" * (length - front - back) + username[-back:]
 # =================================================
 
-# ==================== 钉钉通知函数 ====================
 def get_beijing_time():
-    """获取北京时间（UTC+8）"""
     return datetime.utcnow() + timedelta(hours=8)
 
 def get_beijing_time_str():
-    """获取北京时间字符串"""
     return get_beijing_time().strftime("%Y-%m-%d %H:%M:%S")
 
 def send_dingtalk_notification(summary, details_md="", full_logs=""):
@@ -72,7 +100,7 @@ def send_dingtalk_notification(summary, details_md="", full_logs=""):
         string_to_sign_enc = string_to_sign.encode('utf-8')
         hmac_code = hmac.new(secret_enc, string_to_sign_enc, digestmod=hashlib.sha256).digest()
         sign = urllib.parse.quote_plus(base64.b64encode(hmac_code))
-        webhook_url = f"{webhook_url}&timestamp={timestamp}&sign={sign}"
+        webhook_url = f"{DINGTALK_WEBHOOK}&timestamp={timestamp}&sign={sign}"
     
     message = {
         "msgtype": "markdown",
@@ -97,14 +125,12 @@ def send_dingtalk_notification(summary, details_md="", full_logs=""):
     except Exception as e:
         print(f"❌ 钉钉通知异常: {e}")
 
-# ==================== 日志收集器 ====================
 class LogCollector:
     """收集所有日志，用于发送给钉钉"""
     def __init__(self):
         self.logs = []
     
     def add(self, level, message):
-        """【已修改为北京时间】"""
         beijing_time_str = get_beijing_time().strftime("%H:%M:%S")
         log_entry = f"[{beijing_time_str}] [{level}] {message}"
         self.logs.append(log_entry)
@@ -125,45 +151,72 @@ class LogCollector:
     def get_filtered_logs(self):
         return "\n".join([log for log in self.logs if "DEBUG" not in log])
 
-# ==================== 主业务逻辑 ====================
+# ==================== 核心修改：隐私保护版日志 ====================
 def send_sign_request(username, log_collector):
-    """发送签到请求"""
+    """发送签到请求【隐私保护版】"""
     data = f"username={username}"
+    # 生成脱敏用户名，用于钉钉通知
+    masked_username = mask_username(username)
     
     try:
+        # 注意：requests会自动处理Content-Length，无需手动设置
         response = requests.post(API_URL, headers=HEADERS, data=data, timeout=10)
         status_code = response.status_code
+        response_text = response.text
         
         try:
             json_resp = response.json()
             message = json_resp.get('message', json_resp.get('msg', '无message字段'))
         except:
-            message = response.text[:200] if response.text else '无法解析响应'
+            message = response_text[:200] if response_text else '无法解析响应'
         
-        log_collector.info(f"用户 {username}: 状态码 {status_code}, 响应消息 → {message}")
+        # 判定是否真正成功
+        success = is_success(status_code, response_text)
+        
+        if success:
+            log_collector.info(f"用户 {masked_username}: ✅ 成功，状态码 {status_code}")
+        else:
+            log_collector.error(f"用户 {masked_username}: ❌ 失败，状态码 {status_code}, 消息: {message}")
         
         return {
             "username": username,
-            "status": "成功",
+            "masked_username": masked_username,  # 新增脱敏用户名
+            "status": "成功" if success else "失败",
             "status_code": status_code,
-            "message": message
+            "message": message,
+            "success": success
         }
             
     except requests.exceptions.Timeout:
         error_msg = "请求超时"
-        log_collector.error(f"用户 {username}: {error_msg}")
-        return {"username": username, "status": "失败", "message": error_msg}
+        log_collector.error(f"用户 {masked_username}: ❌ {error_msg}")
+        return {"username": username, "masked_username": masked_username, "status": "失败", "message": error_msg, "success": False}
     except requests.exceptions.ConnectionError:
         error_msg = "网络连接错误"
-        log_collector.error(f"用户 {username}: {error_msg}")
-        return {"username": username, "status": "失败", "message": error_msg}
+        log_collector.error(f"用户 {masked_username}: ❌ {error_msg}")
+        return {"username": username, "masked_username": masked_username, "status": "失败", "message": error_msg, "success": False}
     except Exception as e:
         error_msg = f"发生错误: {str(e)}"
-        log_collector.error(f"用户 {username}: {error_msg}")
-        return {"username": username, "status": "失败", "message": error_msg}
+        log_collector.error(f"用户 {masked_username}: ❌ {error_msg}")
+        return {"username": username, "masked_username": masked_username, "status": "失败", "message": error_msg, "success": False}
+
+def is_success(status_code, response_text):
+    """
+    判定请求是否真正成功
+    状态码必须是2xx且响应不是错误页面
+    """
+    if not status_code or not (200 <= status_code < 300):
+        return False
+    
+    error_indicators = ["404 Not Found", "500 Internal", "错误", "Error", "<html>"]
+    if any(indicator in response_text for indicator in error_indicators):
+        return False
+    
+    return True
+# =================================================
 
 def main():
-    """主函数"""
+    """主函数【隐私保护版】"""
     log_collector = LogCollector()
     log_collector.info("========== 开始执行定时签到任务 ==========")
     log_collector.info(f"目标API: {API_URL}")
@@ -185,17 +238,17 @@ def main():
     detailed_results = []
     
     for i, username in enumerate(USERNAMES, 1):
-        log_collector.info(f"[{i}/{len(USERNAMES)}] 处理用户: {username}")
+        masked_username = mask_username(username)
+        log_collector.info(f"[{i}/{len(USERNAMES)}] 处理用户: {masked_username}")
         
         result = send_sign_request(username, log_collector)
         detailed_results.append(result)
         
-        if result['status'] == '成功':
+        if result.get('success', False):
             success_count += 1
         else:
             fail_count += 1
         
-        # 随机间隔【已修改为5-10秒】
         if i < len(USERNAMES):
             sleep_time = random.uniform(INTERVAL_MIN, INTERVAL_MAX)
             log_collector.debug(f"等待 {sleep_time:.2f} 秒...")
@@ -214,7 +267,7 @@ def main():
     details_md += "| :--- | :--- | :--- | :--- |\n"
     
     for idx, detail in enumerate(detailed_results, 1):
-        username = detail.get('username', '未知')
+        masked_username = detail.get('masked_username', '***')
         status = detail.get('status', 'N/A')
         status_code = detail.get('status_code', '-')
         message = detail.get('message', '无消息')
@@ -223,14 +276,16 @@ def main():
         if len(message) > 100:
             message = message[:97] + "..."
         
-        status_emoji = "✅" if status == "成功" else "❌"
-        details_md += f"| {idx} | {username} | {status_emoji} {status_code} | {message} |\n"
+        is_user_success = detail.get('success', False)
+        status_emoji = "✅" if is_user_success else "❌"
+        details_md += f"| {idx} | {masked_username} | {status_emoji} {status_code} | {message} |\n"
     
     if fail_count > 0:
         details_md += "\n#### ⚠️ 失败详情\n\n"
-        failed_users = [d for d in detailed_results if d['status'] == '失败']
+        failed_users = [d for d in detailed_results if not d.get('success', False)]
         for fail in failed_users:
-            details_md += f"- **{fail['username']}**: {fail['message']}\n"
+            masked_username = fail.get('masked_username', '***')
+            details_md += f"- **{masked_username}**: {fail['message']}\n"
     
     print("\n正在发送钉钉通知...")
     send_dingtalk_notification(
