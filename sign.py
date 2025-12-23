@@ -48,11 +48,6 @@ DINGTALK_KEYWORD = "签到"
 def mask_username(username):
     """
     隐藏用户名中间部分，只显示前后字符
-    
-    规则：
-    - 用户名长度 <= 4：显示前1后1，中间用*填充
-    - 用户名长度 5-6：显示前2后2，中间用*填充
-    - 用户名长度 > 6：显示前3后3，中间用*填充
     """
     if not username:
         return "***"
@@ -147,14 +142,11 @@ class LogCollector:
     def get_filtered_logs(self):
         return "\n".join([log for log in self.logs if "DEBUG" not in log])
 
-# ==================== 核心修正：请求用完整用户名，日志用脱敏用户名 ====================
+# ==================== 修正：日志显示完整用户名 ====================
 def send_sign_request(username, log_collector):
-    """发送签到请求【隐私保护版】"""
-    # ✅ 使用完整用户名发送请求
+    """发送签到请求【修正版】"""
+    # 1. 使用完整用户名构建请求
     data = f"username={username}"
-    
-    # 生成脱敏用户名，仅用于日志记录
-    masked_username = mask_username(username)
     
     try:
         response = requests.post(API_URL, headers=HEADERS, data=data, timeout=10)
@@ -167,19 +159,17 @@ def send_sign_request(username, log_collector):
         except:
             message = response_text[:200] if response_text else '无法解析响应'
         
-        # 判定是否真正成功
         success = is_success(status_code, response_text)
         
-        # ✅ 日志中使用脱敏用户名
+        # 2. 日志中显示完整用户名
         if success:
-            log_collector.info(f"用户 {masked_username}: ✅ 成功，状态码 {status_code}")
+            log_collector.info(f"用户 {username}: ✅ 成功，状态码 {status_code}")
         else:
-            log_collector.error(f"用户 {masked_username}: ❌ 失败，状态码 {status_code}, 消息: {message}")
+            log_collector.error(f"用户 {username}: ❌ 失败，状态码 {status_code}, 消息: {message}")
         
-        # ✅ 返回两种用户名：完整版用于请求记录，脱敏版用于通知
+        # 3. 返回完整用户名（用于日志文件）
         return {
-            "username": username,  # 完整用户名（用于后续请求）
-            "masked_username": masked_username,  # 脱敏用户名（仅用于通知）
+            "username": username,  # 完整用户名（日志使用）
             "status": "成功" if success else "失败",
             "status_code": status_code,
             "message": message,
@@ -188,16 +178,16 @@ def send_sign_request(username, log_collector):
             
     except requests.exceptions.Timeout:
         error_msg = "请求超时"
-        log_collector.error(f"用户 {masked_username}: ❌ {error_msg}")
-        return {"username": username, "masked_username": masked_username, "status": "失败", "message": error_msg, "success": False}
+        log_collector.error(f"用户 {username}: ❌ {error_msg}")
+        return {"username": username, "status": "失败", "message": error_msg, "success": False}
     except requests.exceptions.ConnectionError:
         error_msg = "网络连接错误"
-        log_collector.error(f"用户 {masked_username}: ❌ {error_msg}")
-        return {"username": username, "masked_username": masked_username, "status": "失败", "message": error_msg, "success": False}
+        log_collector.error(f"用户 {username}: ❌ {error_msg}")
+        return {"username": username, "status": "失败", "message": error_msg, "success": False}
     except Exception as e:
         error_msg = f"发生错误: {str(e)}"
-        log_collector.error(f"用户 {masked_username}: ❌ {error_msg}")
-        return {"username": username, "masked_username": masked_username, "status": "失败", "message": error_msg, "success": False}
+        log_collector.error(f"用户 {username}: ❌ {error_msg}")
+        return {"username": username, "status": "失败", "message": error_msg, "success": False}
 
 def is_success(status_code, response_text):
     """
@@ -214,8 +204,9 @@ def is_success(status_code, response_text):
     return True
 # =================================================
 
+# ==================== 核心修正：main函数不提前脱敏 ====================
 def main():
-    """主函数【隐私保护版】"""
+    """主函数【修正版】"""
     log_collector = LogCollector()
     log_collector.info("========== 开始执行定时签到任务 ==========")
     log_collector.info(f"目标API: {API_URL}")
@@ -237,8 +228,8 @@ def main():
     detailed_results = []
     
     for i, username in enumerate(USERNAMES, 1):
-        masked_username = mask_username(username)
-        log_collector.info(f"[{i}/{len(USERNAMES)}] 处理用户: {masked_username}")
+        # ✅ 日志显示完整用户名
+        log_collector.info(f"[{i}/{len(USERNAMES)}] 处理用户: {username}")
         
         # ✅ 传入完整用户名进行请求
         result = send_sign_request(username, log_collector)
@@ -257,6 +248,7 @@ def main():
     result_summary = f"任务完成：成功 {success_count}，失败 {fail_count}"
     log_collector.info(f"========== {result_summary} ==========")
     
+    # ✅ 构建钉钉通知时才进行用户名脱敏
     details_md = f"#### 📊 执行统计\n\n"
     details_md += f"- **总用户数**：{len(USERNAMES)}\n"
     details_md += f"- **成功**：{success_count} 个\n"
@@ -267,7 +259,8 @@ def main():
     details_md += "| :--- | :--- | :--- | :--- |\n"
     
     for idx, detail in enumerate(detailed_results, 1):
-        masked_username = detail.get('masked_username', '***')
+        # ✅ 钉钉表格中使用脱敏用户名
+        masked_username = mask_username(detail.get('username', 'unknown'))
         status = detail.get('status', 'N/A')
         status_code = detail.get('status_code', '-')
         message = detail.get('message', '无消息')
@@ -284,7 +277,8 @@ def main():
         details_md += "\n#### ⚠️ 失败详情\n\n"
         failed_users = [d for d in detailed_results if not d.get('success', False)]
         for fail in failed_users:
-            masked_username = fail.get('masked_username', '***')
+            # ✅ 失败详情中也使用脱敏用户名
+            masked_username = mask_username(fail.get('username', 'unknown'))
             details_md += f"- **{masked_username}**: {fail['message']}\n"
     
     print("\n正在发送钉钉通知...")
