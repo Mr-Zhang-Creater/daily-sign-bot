@@ -10,7 +10,8 @@ import json
 from datetime import datetime, timedelta
 
 # ==================== 配置区域 ====================
-API_URL = "https://app.lkdyw.cn/Beta_v2/sign.php"
+# 修复：Beta_v2 → Bate_v2（关键路径修正）
+API_URL = "https://app.lkdyw.cn/Bate_v2/sign.php"
 
 USERNAMES = [
     "lekansp", "momuser", "abcd123", "我不想上班22222222", "yujingchao",
@@ -32,7 +33,8 @@ HEADERS = {
     "Sec-Fetch-Site": "same-origin",
     "Sec-Fetch-Mode": "cors",
     "Sec-Fetch-Dest": "empty",
-    "Referer": "https://app.lkdyw.cn/Beta_v2/",
+    # 修复：Referer路径同步修正为 Bate_v2
+    "Referer": "https://app.lkdyw.cn/Bate_v2/",
     "Accept-Encoding": "gzip, deflate",
     "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7"
 }
@@ -48,6 +50,11 @@ DINGTALK_KEYWORD = "签到"
 def mask_username(username):
     """
     隐藏用户名中间部分，只显示前后字符
+    
+    规则：
+    - 用户名长度 <= 4：显示前1后1，中间用*填充
+    - 用户名长度 5-6：显示前2后2，中间用*填充
+    - 用户名长度 > 6：显示前3后3，中间用*填充
     """
     if not username:
         return "***"
@@ -75,10 +82,14 @@ def get_beijing_time_str():
     return get_beijing_time().strftime("%Y-%m-%d %H:%M:%S")
 
 def send_dingtalk_notification(summary, details_md="", full_logs=""):
-    """发送钉钉Markdown通知"""
+    """
+    发送钉钉Markdown通知【修复版】
+    - 自动截断超长消息（防止超过20KB）
+    - 发送失败时打印错误到控制台
+    """
     if not DINGTALK_WEBHOOK:
         print("⚠️ 未配置钉钉Webhook，跳过通知")
-        return
+        return False  # 返回失败标志
     
     if DINGTALK_KEYWORD not in summary:
         summary = f"{DINGTALK_KEYWORD}：{summary}"
@@ -102,8 +113,9 @@ def send_dingtalk_notification(summary, details_md="", full_logs=""):
     }
     
     if full_logs:
-        if len(full_logs.encode('utf-8')) > 15000:
-            full_logs = full_logs[:15000] + "\n\n...日志过长，已截断..."
+        # 【修复】严格限制日志大小，避免超过钉钉限制
+        if len(full_logs.encode('utf-8')) > 8000:  # 限制在8KB以内
+            full_logs = full_logs[:4000] + "\n\n...日志过长，已截断..."
         message["markdown"]["text"] += f"\n\n#### 📄 完整日志\n\n```\n{full_logs}\n```"
     
     try:
@@ -111,10 +123,14 @@ def send_dingtalk_notification(summary, details_md="", full_logs=""):
         result = response.json()
         if result.get("errcode") != 0:
             print(f"❌ 钉钉通知发送失败: {result}")
+            print(f"响应内容: {response.text}")
+            return False  # 返回失败标志
         else:
             print("✅ 钉钉通知发送成功")
+            return True  # 返回成功标志
     except Exception as e:
         print(f"❌ 钉钉通知异常: {e}")
+        return False  # 返回失败标志
 
 class LogCollector:
     """收集所有日志，用于发送给钉钉"""
@@ -142,10 +158,8 @@ class LogCollector:
     def get_filtered_logs(self):
         return "\n".join([log for log in self.logs if "DEBUG" not in log])
 
-# ==================== 修正：日志显示完整用户名 ====================
 def send_sign_request(username, log_collector):
-    """发送签到请求【修正版】"""
-    # 1. 使用完整用户名构建请求
+    """发送签到请求"""
     data = f"username={username}"
     
     try:
@@ -161,15 +175,15 @@ def send_sign_request(username, log_collector):
         
         success = is_success(status_code, response_text)
         
-        # 2. 日志中显示完整用户名
         if success:
             log_collector.info(f"用户 {username}: ✅ 成功，状态码 {status_code}")
         else:
-            log_collector.error(f"用户 {username}: ❌ 失败，状态码 {status_code}, 消息: {message}")
+            # 【修复】截断错误消息，避免日志过长
+            short_msg = message[:50] + "..." if len(message) > 50 else message
+            log_collector.error(f"用户 {username}: ❌ 失败，状态码 {status_code}, 消息: {short_msg}")
         
-        # 3. 返回完整用户名（用于日志文件）
         return {
-            "username": username,  # 完整用户名（日志使用）
+            "username": username,
             "status": "成功" if success else "失败",
             "status_code": status_code,
             "message": message,
@@ -202,11 +216,10 @@ def is_success(status_code, response_text):
         return False
     
     return True
-# =================================================
 
-# ==================== 核心修正：main函数不提前脱敏 ====================
+# ==================== 核心修改：备用通知方案 ====================
 def main():
-    """主函数【修正版】"""
+    """主函数【修复版】"""
     log_collector = LogCollector()
     log_collector.info("========== 开始执行定时签到任务 ==========")
     log_collector.info(f"目标API: {API_URL}")
@@ -228,10 +241,8 @@ def main():
     detailed_results = []
     
     for i, username in enumerate(USERNAMES, 1):
-        # ✅ 日志显示完整用户名
         log_collector.info(f"[{i}/{len(USERNAMES)}] 处理用户: {username}")
         
-        # ✅ 传入完整用户名进行请求
         result = send_sign_request(username, log_collector)
         detailed_results.append(result)
         
@@ -248,7 +259,6 @@ def main():
     result_summary = f"任务完成：成功 {success_count}，失败 {fail_count}"
     log_collector.info(f"========== {result_summary} ==========")
     
-    # ✅ 构建钉钉通知时才进行用户名脱敏
     details_md = f"#### 📊 执行统计\n\n"
     details_md += f"- **总用户数**：{len(USERNAMES)}\n"
     details_md += f"- **成功**：{success_count} 个\n"
@@ -259,7 +269,6 @@ def main():
     details_md += "| :--- | :--- | :--- | :--- |\n"
     
     for idx, detail in enumerate(detailed_results, 1):
-        # ✅ 钉钉表格中使用脱敏用户名
         masked_username = mask_username(detail.get('username', 'unknown'))
         status = detail.get('status', 'N/A')
         status_code = detail.get('status_code', '-')
@@ -277,16 +286,24 @@ def main():
         details_md += "\n#### ⚠️ 失败详情\n\n"
         failed_users = [d for d in detailed_results if not d.get('success', False)]
         for fail in failed_users:
-            # ✅ 失败详情中也使用脱敏用户名
             masked_username = mask_username(fail.get('username', 'unknown'))
             details_md += f"- **{masked_username}**: {fail['message']}\n"
     
     print("\n正在发送钉钉通知...")
-    send_dingtalk_notification(
+    # 【修复】获取发送结果
+    dingtalk_success = send_dingtalk_notification(
         summary=f"{DINGTALK_KEYWORD}任务完成：{result_summary}",
         details_md=details_md,
         full_logs=log_collector.get_filtered_logs()
     )
+    
+    # 【修复】如果钉钉发送失败，打印到日志作为备用方案
+    if not dingtalk_success:
+        log_collector.error("=" * 50)
+        log_collector.error("⚠️ 钉钉通知发送失败！请检查日志！")
+        log_collector.error(f"任务结果: {result_summary}")
+        log_collector.error("=" * 50)
+        # 也可以在这里添加邮件通知等其他方式
 
 # ==================== 入口函数 ====================
 if __name__ == "__main__":
