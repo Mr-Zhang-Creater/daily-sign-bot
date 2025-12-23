@@ -60,18 +60,14 @@ def mask_username(username):
     length = len(username)
     
     if length <= 2:
-        return username[0] + "*"  # 很短的用户名
+        return username[0] + "*"
     
     if length <= 4:
-        # 例如：abcd → a*d
         return username[0] + "*" * (length - 2) + username[-1]
     
     if length <= 6:
-        # 例如：abcde → ab*de
         return username[:2] + "*" * (length - 4) + username[-2:]
     
-    # length > 6
-    # 例如：abcdefgh → abc***fgh
     front = 3
     back = 3
     return username[:front] + "*" * (length - front - back) + username[-back:]
@@ -151,15 +147,16 @@ class LogCollector:
     def get_filtered_logs(self):
         return "\n".join([log for log in self.logs if "DEBUG" not in log])
 
-# ==================== 核心修改：隐私保护版日志 ====================
+# ==================== 核心修正：请求用完整用户名，日志用脱敏用户名 ====================
 def send_sign_request(username, log_collector):
     """发送签到请求【隐私保护版】"""
+    # ✅ 使用完整用户名发送请求
     data = f"username={username}"
-    # 生成脱敏用户名，用于钉钉通知
+    
+    # 生成脱敏用户名，仅用于日志记录
     masked_username = mask_username(username)
     
     try:
-        # 注意：requests会自动处理Content-Length，无需手动设置
         response = requests.post(API_URL, headers=HEADERS, data=data, timeout=10)
         status_code = response.status_code
         response_text = response.text
@@ -173,14 +170,16 @@ def send_sign_request(username, log_collector):
         # 判定是否真正成功
         success = is_success(status_code, response_text)
         
+        # ✅ 日志中使用脱敏用户名
         if success:
             log_collector.info(f"用户 {masked_username}: ✅ 成功，状态码 {status_code}")
         else:
             log_collector.error(f"用户 {masked_username}: ❌ 失败，状态码 {status_code}, 消息: {message}")
         
+        # ✅ 返回两种用户名：完整版用于请求记录，脱敏版用于通知
         return {
-            "username": username,
-            "masked_username": masked_username,  # 新增脱敏用户名
+            "username": username,  # 完整用户名（用于后续请求）
+            "masked_username": masked_username,  # 脱敏用户名（仅用于通知）
             "status": "成功" if success else "失败",
             "status_code": status_code,
             "message": message,
@@ -241,6 +240,7 @@ def main():
         masked_username = mask_username(username)
         log_collector.info(f"[{i}/{len(USERNAMES)}] 处理用户: {masked_username}")
         
+        # ✅ 传入完整用户名进行请求
         result = send_sign_request(username, log_collector)
         detailed_results.append(result)
         
