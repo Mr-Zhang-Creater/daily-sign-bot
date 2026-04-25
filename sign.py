@@ -10,7 +10,7 @@ import json
 from datetime import datetime, timedelta
 
 # ==================== 配置区域 ====================
-API_URL = "https://lkvlog.cn/Bate_v2/sign.php"
+API_URL = "https://lkvlog.cn/info/sign.php"          # ✨ 新接口地址
 
 USERNAMES = [
     "lekansp", "momuser", "abcd123", "我不想上班22222222", "yujingchao",
@@ -40,7 +40,7 @@ HEADERS = {
     "Sec-Fetch-Site": "same-origin",
     "Sec-Fetch-Mode": "cors",
     "Sec-Fetch-Dest": "empty",
-    "Referer": "https://lkvlog.cn/Bate_v2/",
+    "Referer": "https://lkvlog.cn/info/",              # ✨ 新 Referer
     "Accept-Encoding": "gzip, deflate",
     "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7"
 }
@@ -141,7 +141,7 @@ class LogCollector:
 
 # ==================== 签到请求 ====================
 def send_sign_request(username, log_collector):
-    """发送签到请求（适配新API响应）"""
+    """发送签到请求（新接口仍返回相同结构）"""
     data = f"username={username}"
     
     try:
@@ -161,6 +161,7 @@ def send_sign_request(username, log_collector):
             continuous_points = rewards.get('continuous', 0)
             continuous_days = json_resp.get('continuous_days', 0)
             new_points = json_resp.get('new_points', '未知')
+            # 新接口多了一个 today_signed 字段，但无需特殊处理
             
             score_info = f"，随机奖励{random_points}积分，连续{continuous_days}天奖励{continuous_points}积分，本次共{total_points}分，总积分{new_points}"
         except:
