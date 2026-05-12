@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 API_URL = "https://lkvlog.cn/info/sign.php"          # ✨ 新接口地址
 
 USERNAMES = [
-    "lekansp", "momuser", "abcd123", "我不想上班22222222", "yujingchao",
+    "lekansp", "momuser", "abcd123",  "yujingchao",
     "fgo666", "fanqie66", "todoto11", "qazwsx123", "huwei123",
     "godlike0", "liubei540", "luf21111", "liangj90", "lujy9324",
     "guq91463", "meiq8135", "jiangaj5", "gann9127", "pande193",
