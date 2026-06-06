@@ -6,14 +6,13 @@ import hashlib
 import base64
 import urllib.parse
 import os
-import json
 from datetime import datetime, timedelta
 
 # ==================== 配置区域 ====================
-API_URL = "https://lkvlog.cn/info/sign.php"          # ✨ 新接口地址
+API_URL = "https://app.weis.vip/info/sign.php"      # ← 新地址
 
 USERNAMES = [
-    "lekansp", "momuser", "abcd123",  "yujingchao",
+    "lekansp", "momuser", "abcd123", "我不想上班22222222", "yujingchao",
     "fgo666", "fanqie66", "todoto11", "qazwsx123", "huwei123",
     "godlike0", "liubei540", "luf21111", "liangj90", "lujy9324",
     "guq91463", "meiq8135", "jiangaj5", "gann9127", "pande193",
@@ -30,17 +29,17 @@ USERNAMES = [
 ]
 
 HEADERS = {
-    "Host": "lkvlog.cn",
+    "Host": "app.weis.vip",                           # ← 新 Host
     "Connection": "keep-alive",
     "User-Agent": "Mozilla/5.0 (Linux; Android 10; TAS-AN00 Build/HUAWEITAS-AN00; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/74.0.3729.186 Mobile Safari/537.36 AgentWeb/5.0.8  UCBrowser/11.6.4.950",
     "Content-Type": "application/x-www-form-urlencoded",
     "Accept": "*/*",
-    "Origin": "https://lkvlog.cn",
+    "Origin": "https://app.weis.vip",                 # ← 新 Origin
     "X-Requested-With": "com.lookvideo",
     "Sec-Fetch-Site": "same-origin",
     "Sec-Fetch-Mode": "cors",
     "Sec-Fetch-Dest": "empty",
-    "Referer": "https://lkvlog.cn/info/",              # ✨ 新 Referer
+    "Referer": "https://app.weis.vip/info/",          # ← 新 Referer
     "Accept-Encoding": "gzip, deflate",
     "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7"
 }
@@ -54,7 +53,6 @@ DINGTALK_KEYWORD = "签到"
 
 # ==================== 用户名脱敏 ====================
 def mask_username(username):
-    """隐藏用户名中间部分，只显示前后字符"""
     if not username:
         return "***"
     length = len(username)
@@ -80,7 +78,6 @@ def get_beijing_time_str():
 
 # ==================== 钉钉通知 ====================
 def send_dingtalk_notification(summary, details_md=""):
-    """发送钉钉Markdown通知"""
     if not DINGTALK_WEBHOOK:
         print("⚠️ 未配置钉钉Webhook，跳过通知")
         return False
@@ -141,7 +138,6 @@ class LogCollector:
 
 # ==================== 签到请求 ====================
 def send_sign_request(username, log_collector):
-    """发送签到请求（新接口仍返回相同结构）"""
     data = f"username={username}"
     
     try:
@@ -154,14 +150,12 @@ def send_sign_request(username, log_collector):
             success = json_resp.get('success', False)
             message = json_resp.get('message', '')
             
-            # 提取详细积分信息
             rewards = json_resp.get('rewards', {})
             total_points = rewards.get('total', 0)
             random_points = rewards.get('random', 0)
             continuous_points = rewards.get('continuous', 0)
             continuous_days = json_resp.get('continuous_days', 0)
             new_points = json_resp.get('new_points', '未知')
-            # 新接口多了一个 today_signed 字段，但无需特殊处理
             
             score_info = f"，随机奖励{random_points}积分，连续{continuous_days}天奖励{continuous_points}积分，本次共{total_points}分，总积分{new_points}"
         except:
@@ -238,11 +232,9 @@ def main():
             log_collector.debug(f"等待 {sleep_time:.2f} 秒...")
             time.sleep(sleep_time)
     
-    # 任务总结
     result_summary = f"任务完成：成功 {success_count}，失败 {fail_count}，总获得积分 {total_score} 分"
     log_collector.info(f"========== {result_summary} ==========")
     
-    # 构建钉钉消息详情
     details_md = f"#### 📊 执行统计\n\n"
     details_md += f"- **总用户数**：{len(USERNAMES)}\n"
     details_md += f"- **成功**：{success_count} 个\n"
