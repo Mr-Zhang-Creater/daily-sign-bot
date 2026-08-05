@@ -9,7 +9,7 @@ import os
 from datetime import datetime, timedelta
 
 # ==================== 配置区域 ====================
-API_URL = "https://app.weis.vip/info/sign.php"      # ← 新地址
+API_URL = "https://app.weis.vip/info/sign.php"      # ← 新地址呀
 
 USERNAMES = [
     "lekansp", "momuser", "abcd123", "yujingchao",
